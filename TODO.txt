@@ -1,0 +1,6 @@
+TODO
+----
+
+ - Add Memcached via http://code.google.com/p/spymemcached/
+ - MyNodeIsomorphismMap does not work
+ - ...
