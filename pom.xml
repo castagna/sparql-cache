@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.talis.labs</groupId>
+  <artifactId>sparql-cache</artifactId>
+  <packaging>jar</packaging>
+  <version>0.0.1-SNAPSHOT</version>
+ 
+  <name>SPARQL Cache</name>
+  <url>http://github.com/castagna/sparql-cache</url>
+  <inceptionYear>2011</inceptionYear>
+  <description>An experimental cache for SPARQL endpoints</description>
+ 
+  <organization>
+    <name>Talis Systems Ltd.</name>
+    <url>http://www.talis.com/</url>
+  </organization>
+   
+  <developers>
+    <developer>
+      <name>Paolo Castagna</name>
+    </developer>
+  </developers>
+ 
+  <licenses>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:git://github.com/castagna/sparql-cache.git</connection>
+    <url>http://github.com/castagna/sparql-cache</url>
+  </scm>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jdk.version>1.6</jdk.version>
+    <arq.version>2.8.8-SNAPSHOT</arq.version>
+    <slf4j.version>1.6.1</slf4j.version>
+    <junit.version>4.8.2</junit.version>
+  </properties>
+
+  <distributionManagement>
+    <repository>
+      <id>talis-oss-releases</id>
+      <url>http://oss.talisplatform.com/content/repositories/talis-releases</url>
+    </repository>
+    <snapshotRepository>
+      <id>talis-oss-snapshots</id>
+      <url>http://oss.talisplatform.com/content/repositories/talis-snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <dependencies>
+
+    <dependency>
+      <groupId>com.hp.hpl.jena</groupId>
+      <artifactId>arq</artifactId>
+      <version>${arq.version}</version>
+    </dependency>
+    
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-log4j12</artifactId>
+      <version>${slf4j.version}</version>
+      <scope>test</scope>
+      <optional>true</optional>
+    </dependency>
+    
+  </dependencies>
+
+  <repositories>
+    <repository>
+      <id>jena-dev</id>
+      <url>http://openjena.org/repo-dev/</url>
+    </repository>
+  </repositories>
+  
+  <build>
+ 
+    <plugins>
+ 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>${jdk.version}</source>
+          <target>${jdk.version}</target>
+          <encoding>${project.build.sourceEncoding}</encoding>
+        </configuration>
+      </plugin>
+ 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions> 
+          <execution>
+            <id>attach-sources</id>
+            <phase>package</phase>
+            <goals>
+	          <goal>jar</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>attach-sources-test</id>
+            <phase>package</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+ 
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-eclipse-plugin</artifactId>
+        <configuration>
+         <buildOutputDirectory>${project.build.directory}/classes</buildOutputDirectory>
+         <downloadSources>true</downloadSources>
+         <downloadJavadocs>false</downloadJavadocs>
+         <useProjectReferences>false</useProjectReferences>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <configuration>
+          <remoteTagging>true</remoteTagging>
+          <preparationGoals>clean install</preparationGoals>
+          <autoVersionSubmodules>true</autoVersionSubmodules>
+        </configuration>
+      </plugin>
+
+    </plugins>
+ 
+  </build>
+  
+</project>
+
