@@ -42,6 +42,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
 
     private String key = null;
     private MemcachedClient client;
+    public static int TTL = 60*60*24; // TTL is 1 day in seconds
 
     public MemcachedQueryEngineHTTP(String serviceURI, Query query) {
         super(serviceURI, query);
@@ -66,7 +67,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             rs = ResultSetFactory.fromXML((String)value);
         } else {
             rs = super.execSelect();
-            client.set(key, 60*60*24, ResultSetFormatter.asXMLString(rs)); // TTL is 1 day in seconds
+            client.set(key, TTL, ResultSetFormatter.asXMLString(rs));
         }
         return rs;
     }
@@ -80,7 +81,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             toModel((String)value, model);
         } else {
             model = super.execConstruct();
-            client.set(key, 60*60*24, toString(model)); // TTL is 1 day in seconds
+            client.set(key, TTL, toString(model));
         }        
 
         return model;
@@ -95,7 +96,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             toModel((String)value, model);
         } else {
             model = super.execConstruct(m);
-            client.set(key, 60*60*24, toString(model)); // TTL is 1 day in seconds
+            client.set(key, TTL, toString(model));
         }        
 
         return model;
@@ -110,7 +111,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             toModel((String)value, model);
         } else {
             model = super.execDescribe();
-            client.set(key, 60*60*24, toString(model)); // TTL is 1 day in seconds
+            client.set(key, TTL, toString(model));
         }        
 
         return model;
@@ -125,7 +126,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             toModel((String)value, model);
         } else {
             model = super.execDescribe(m);
-            client.set(key, 60*60*24, toString(model)); // TTL is 1 day in seconds
+            client.set(key, TTL, toString(model));
         }
 
         return model;
@@ -140,7 +141,7 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
             ask = Boolean.parseBoolean((String)value);
         } else {
             ask = super.execAsk();
-            client.set(key, 60*60*24, Boolean.toString(ask)); // TTL is 1 day in seconds
+            client.set(key, TTL, Boolean.toString(ask));
         }
 
         return ask;
@@ -171,9 +172,9 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
         return null;
     }
     
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         String serviceURI = "http://api.talis.com/stores/bbc-wildlife/services/sparql";
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 10000; i++) {
             Timer timerQuery = new Timer();
             timerQuery.startTimer();
 //            MemcachedQueryEngineHTTP qexec = new MemcachedQueryEngineHTTP(serviceURI, "SELECT * { ?s ?p ?o } LIMIT 100000");
@@ -200,6 +201,8 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Cloneab
 
             
             System.out.println("query " + i + " " + timerQuery.endTimer());
+            
+            Thread.sleep(1000);
         }
     }
 
