@@ -42,6 +42,7 @@
     <arq.version>2.8.8-SNAPSHOT</arq.version>
     <slf4j.version>1.6.1</slf4j.version>
     <junit.version>4.8.2</junit.version>
+    <memcached.version>2.5</memcached.version>
   </properties>
 
   <distributionManagement>
@@ -56,6 +57,12 @@
   </distributionManagement>
 
   <dependencies>
+
+    <dependency>
+      <groupId>spy</groupId>
+      <artifactId>memcached</artifactId>
+      <version>${memcached.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>com.hp.hpl.jena</groupId>
@@ -90,6 +97,15 @@
     <repository>
       <id>jena-dev</id>
       <url>http://openjena.org/repo-dev/</url>
+    </repository>
+    <repository>
+      <id>spy</id>
+      <name>Spy Repository</name>
+      <layout>default</layout>
+      <url>http://bleu.west.spy.net/~dustin/m2repo/</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
   
