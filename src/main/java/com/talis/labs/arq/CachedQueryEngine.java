@@ -1,212 +1,72 @@
-/*
- * Copyright © 2011 Talis Systems Ltd.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.talis.labs.arq;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Random;
+import com.hp.hpl.jena.query.Query ;
+import com.hp.hpl.jena.sparql.ARQInternalErrorException ;
+import com.hp.hpl.jena.sparql.algebra.Op ;
+import com.hp.hpl.jena.sparql.algebra.Transform ;
+import com.hp.hpl.jena.sparql.algebra.TransformCopy ;
+import com.hp.hpl.jena.sparql.algebra.Transformer ;
+import com.hp.hpl.jena.sparql.algebra.op.OpBGP ;
+import com.hp.hpl.jena.sparql.core.DatasetGraph ;
+import com.hp.hpl.jena.sparql.engine.Plan ;
+import com.hp.hpl.jena.sparql.engine.QueryEngineFactory ;
+import com.hp.hpl.jena.sparql.engine.QueryEngineRegistry ;
+import com.hp.hpl.jena.sparql.engine.QueryIterator ;
+import com.hp.hpl.jena.sparql.engine.binding.Binding ;
+import com.hp.hpl.jena.sparql.engine.main.QueryEngineMain ;
+import com.hp.hpl.jena.sparql.util.Context ;
 
-import org.openjena.atlas.lib.ActionKeyValue;
-import org.openjena.atlas.lib.Cache;
-import org.openjena.atlas.lib.CacheFactory;
-import org.openjena.atlas.lib.Pair;
+public class CachedQueryEngine extends QueryEngineMain {
 
-import com.hp.hpl.jena.query.ARQ;
-import com.hp.hpl.jena.query.Dataset;
-import com.hp.hpl.jena.query.DatasetFactory;
-import com.hp.hpl.jena.query.Query;
-import com.hp.hpl.jena.query.QueryFactory;
-import com.hp.hpl.jena.query.ResultSet;
-import com.hp.hpl.jena.query.ResultSetFactory;
-import com.hp.hpl.jena.rdf.model.Model;
-import com.hp.hpl.jena.rdf.model.ModelFactory;
-import com.hp.hpl.jena.sparql.engine.QueryEngineFactory;
-import com.hp.hpl.jena.sparql.engine.QueryEngineRegistry;
-import com.hp.hpl.jena.sparql.engine.QueryExecutionBase;
-import com.hp.hpl.jena.sparql.resultset.ResultSetRewindable;
-import com.hp.hpl.jena.sparql.util.Context;
-import com.hp.hpl.jena.sparql.util.Timer;
-
-public class CachedQueryEngine extends QueryExecutionBase {
-
-    private Pair<Dataset, Query> key = null;
-    private static Cache<Pair<Dataset, Query>, Object> cache = CacheFactory.createCacheUnbounded();
-
-    static {
-        cache.setDropHandler(new ActionKeyValue<Pair<Dataset, Query>, Object>() {
-            @Override public void apply(Pair<Dataset, Query> key, Object value) {}
-        });
+    public CachedQueryEngine(Query query, DatasetGraph dataset, Binding initial, Context context) {
+        super(query, dataset, initial, context);
     }
 
-    public CachedQueryEngine(Query query, Dataset dataset, Context context, QueryEngineFactory qeFactory) {
-        super(query, dataset, context, qeFactory);
-        this.key = new Pair<Dataset, Query>(dataset, query);
+    public CachedQueryEngine(Query query, DatasetGraph dataset) { 
+        this(query, dataset, null, null);
     }
 
     @Override
-    public ResultSet execSelect() {
-        ResultSetRewindable rs = null;
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                return (ResultSetRewindable) cache.get(key);
-            }
-        }
-
-        rs = ResultSetFactory.makeRewindable(super.execSelect());
-        synchronized (cache) {
-            cache.put(key, rs);
-        }
-        rs.reset();
-
-        return rs;
+    public QueryIterator eval(Op op, DatasetGraph dsg, Binding initial, Context context) {
+        Transform transform = new IdentityTransform();
+        op = Transformer.transform(transform, op);
+        return super.eval(op, dsg, initial, context);
     }
-
+    
     @Override
-    public Model execConstruct() {
-        Model model = ModelFactory.createDefaultModel();
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                return model.add((Model) cache.get(key));
-            }
-        }
+    protected Op modifyOp(Op op) {
+        return super.modifyOp(op) ;
+    }
+    
+    static QueryEngineFactory factory = new CachedQueryEngineFactory();
+    static public QueryEngineFactory getFactory() { return factory; } 
+    static public void register() { QueryEngineRegistry.addFactory(factory); }
+    static public void unregister() { QueryEngineRegistry.removeFactory(factory); }
 
-        model = super.execConstruct();
-        synchronized (cache) {
-            cache.put(key, model);
-        }
-
-        return model;
+    static class IdentityTransform extends TransformCopy {
+        @Override
+        public Op transform(OpBGP opBGP) { return opBGP; }
     }
 
-    @Override
-    public Model execConstruct(Model m) {
-        Model model = ModelFactory.createDefaultModel();
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                return model.add((Model) cache.get(key));
-            }
+    static class CachedQueryEngineFactory implements QueryEngineFactory {
+
+        @Override
+        public boolean accept(Query query, DatasetGraph dataset, Context context) { return true; }
+
+        @Override
+        public Plan create(Query query, DatasetGraph dataset, Binding initial, Context context) {
+            CachedQueryEngine engine = new CachedQueryEngine(query, dataset, initial, context) ;
+            return engine.getPlan() ;
         }
 
-        model = super.execConstruct(m);
-        synchronized (cache) {
-            cache.put(key, model);
+        @Override
+        public boolean accept(Op op, DatasetGraph dataset, Context context) { return false; }
+
+        @Override
+        public Plan create(Op op, DatasetGraph dataset, Binding inputBinding, Context context) {
+            throw new ARQInternalErrorException("CachedQueryEngineFactory: factory called directly with an algebra expression") ;
         }
 
-        return model;
-    }
-
-    @Override
-    public Model execDescribe() {
-        Model model = ModelFactory.createDefaultModel();
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                model.add((Model) cache.get(key));
-            }
-        }
-
-        model = super.execDescribe();
-        synchronized (cache) {
-            cache.put(key, model);
-        }
-
-        return model;
-    }
-
-    @Override
-    public Model execDescribe(Model m) {
-        Model model = ModelFactory.createDefaultModel();
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                model.add((Model) cache.get(key));
-            }
-        }
-
-        model = super.execDescribe(m);
-        synchronized (cache) {
-            cache.put(key, model);
-        }
-
-        return model;
-    }
-
-    @Override
-    public boolean execAsk() {
-        boolean ask;
-        synchronized (cache) {
-            if (cache.containsKey(key)) {
-                ask = (Boolean) cache.get(key);
-            }
-        }
-
-        ask = super.execAsk();
-        synchronized (cache) {
-            cache.put(key, ask);
-        }
-
-        return ask;
-    }
-
-    public static void invalidate(Dataset dataset) {
-        synchronized (cache) {
-            Iterator<Pair<Dataset, Query>> iter = cache.keys();
-            while (iter.hasNext()) {
-                Pair<Dataset, Query> key = iter.next();
-                if (key.getLeft().equals(dataset)) {
-                    iter.remove();
-                }
-            }
-        }
-    }
-
-    public static void main(String[] args) {
-        Random random = new Random();
-        File path = new File ("src/test/resources/dataset/");
-        List<String> uriList = new ArrayList<String>();
-        for (File file : path.listFiles()) {
-            if ( file.isFile() ) {
-                uriList.add(file.getAbsolutePath());
-            }
-        }
-        Dataset dataset = DatasetFactory.create("src/test/resources/dataset/dft.n3", uriList);
-        for (int i = 0; i < 100000; i++) {
-            Timer timerQuery = new Timer();
-            timerQuery.startTimer();
-            Query query = QueryFactory.create("SELECT * { ?s_" + random.nextInt(100) + " ?p ?o } LIMIT 100");
-            Context context = ARQ.getContext().copy();
-            QueryEngineFactory qeFactory = QueryEngineRegistry.get().find(query, dataset.asDatasetGraph(), context);
-            CachedQueryEngine qexec = new CachedQueryEngine(query, dataset, context, qeFactory);
-            if (i % 1000 == 0) {
-                Timer timerInvalidate = new Timer();
-                timerInvalidate.startTimer();
-                CachedQueryEngine.invalidate(dataset);
-                System.out.println("cache invalidated " + timerInvalidate.endTimer());
-            }
-            try {
-                ResultSet results = qexec.execSelect();
-                for (; results.hasNext();) {
-                    results.nextSolution();
-                }
-            } finally {
-                qexec.close();
-            }
-            System.out.println("query " + i + " " + timerQuery.endTimer());
-        }
-    }
+    } 
 
 }

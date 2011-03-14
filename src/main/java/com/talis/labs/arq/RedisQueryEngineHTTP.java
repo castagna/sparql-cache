@@ -21,55 +21,53 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
-
-import net.spy.memcached.AddrUtil;
-import net.spy.memcached.MemcachedClient;
+import java.util.Set;
 
 import org.openjena.atlas.lib.Closeable;
 import org.openjena.atlas.lib.Pair;
+
+import redis.clients.jedis.Jedis;
 
 import com.hp.hpl.jena.query.Query;
 import com.hp.hpl.jena.query.QueryFactory;
 import com.hp.hpl.jena.query.ResultSet;
 import com.hp.hpl.jena.query.ResultSetFactory;
 import com.hp.hpl.jena.query.ResultSetFormatter;
+import com.hp.hpl.jena.query.ResultSetRewindable;
 import com.hp.hpl.jena.rdf.model.Model;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
-import com.hp.hpl.jena.rdf.model.StmtIterator;
 import com.hp.hpl.jena.sparql.engine.http.QueryEngineHTTP;
 import com.hp.hpl.jena.sparql.util.Timer;
 
-public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeable {
+public class RedisQueryEngineHTTP extends QueryEngineHTTP implements Closeable {
 
     private String key = null;
-    private MemcachedClient client;
-    public static int TTL = 60*60*24; // TTL is 1 day in seconds
+    private String service = null;
+    private Jedis client;
 
-    public MemcachedQueryEngineHTTP(String serviceURI, Query query) {
+    public RedisQueryEngineHTTP(String serviceURI, Query query) {
         super(serviceURI, query);
         this.key = Integer.toString(new Pair<String, Query>(serviceURI, query).hashCode());
-        try {
-            this.client = new MemcachedClient(AddrUtil.getAddresses("127.0.0.1:11211"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        this.service = Integer.toString(serviceURI.hashCode());
+        this.client = new Jedis("127.0.0.1");
     }
 
-    public MemcachedQueryEngineHTTP(String serviceURI, String queryString) {
+    public RedisQueryEngineHTTP(String serviceURI, String queryString) {
         this(serviceURI, QueryFactory.create(queryString));
     }
 
     @Override
     public ResultSet execSelect() {
-        ResultSet rs = null;
+        ResultSetRewindable rs = null;
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            rs = ResultSetFactory.fromXML((String)value);
+            rs = ResultSetFactory.makeRewindable(ResultSetFactory.fromXML(value));
         } else {
-            rs = super.execSelect();
-            client.set(key, TTL, ResultSetFormatter.asXMLString(rs));
+            rs = ResultSetFactory.makeRewindable(super.execSelect());
+            set(key, ResultSetFormatter.asXMLString(rs));
         }
+        rs.reset();
         return rs;
     }
 
@@ -77,12 +75,12 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
     public Model execConstruct() {
         Model model = ModelFactory.createDefaultModel();
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            toModel((String)value, model);
+            toModel(value, model);
         } else {
             model = super.execConstruct();
-            client.set(key, TTL, toString(model));
+            set(key, toString(model));
         }        
 
         return model;
@@ -92,12 +90,12 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
     public Model execConstruct(Model m) {
         Model model = ModelFactory.createDefaultModel();
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            toModel((String)value, model);
+            toModel(value, model);
         } else {
             model = super.execConstruct(m);
-            client.set(key, TTL, toString(model));
+            set(key, toString(model));
         }        
 
         return model;
@@ -107,12 +105,12 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
     public Model execDescribe() {
         Model model = ModelFactory.createDefaultModel();
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            toModel((String)value, model);
+            toModel(value, model);
         } else {
             model = super.execDescribe();
-            client.set(key, TTL, toString(model));
+            set(key, toString(model));
         }        
 
         return model;
@@ -122,12 +120,12 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
     public Model execDescribe(Model m) {
         Model model = ModelFactory.createDefaultModel();
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            toModel((String)value, model);
+            toModel(value, model);
         } else {
             model = super.execDescribe(m);
-            client.set(key, TTL, toString(model));
+            set(key, toString(model));
         }
 
         return model;
@@ -137,22 +135,38 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
     public boolean execAsk() {
         boolean ask;
         
-        Object value = client.get(key);
+        String value = client.get(key);
         if ( value != null ) {
-            ask = Boolean.parseBoolean((String)value);
+            ask = Boolean.parseBoolean(value);
         } else {
             ask = super.execAsk();
-            client.set(key, TTL, Boolean.toString(ask));
+            set(key, Boolean.toString(ask));
         }
 
         return ask;
     }
 
+    public void invalidate(String service) {
+        Set<String> keys = client.smembers(Integer.toString(service.hashCode()));
+        for (String key : keys) {
+            client.del(key);            
+        }
+    }
+
     @Override
     public void close() {
-        client.shutdown();
+        try {
+            client.disconnect();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
  
+    private void set (String key, String value) {
+        client.set(key, value);
+        client.sadd(service, key);
+    }
+    
     private void toModel(String value, Model model) {
         try {
             InputStream in = new ByteArrayInputStream(value.getBytes("UTF-8"));
@@ -178,28 +192,21 @@ public class MemcachedQueryEngineHTTP extends QueryEngineHTTP implements Closeab
         for (int i = 0; i < 10000; i++) {
             Timer timerQuery = new Timer();
             timerQuery.startTimer();
-//            MemcachedQueryEngineHTTP qexec = new MemcachedQueryEngineHTTP(serviceURI, "SELECT * { ?s ?p ?o } LIMIT 100000");
-//            MemcachedQueryEngineHTTP qexec = new MemcachedQueryEngineHTTP(serviceURI, "CONSTRUCT {?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 100");
-//            try {
-//                ResultSet results = qexec.execSelect();
-//                for (; results.hasNext();) {
-//                    results.nextSolution();
-//                }
-//            } finally {
-//                qexec.close();
-//            }
-
-            MemcachedQueryEngineHTTP qexec = new MemcachedQueryEngineHTTP(serviceURI, "CONSTRUCT {?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 1000");
+            RedisQueryEngineHTTP qexec = new RedisQueryEngineHTTP(serviceURI, "SELECT * { ?s ?p ?o } LIMIT 1000");
+            if (i % 1000 == 0) {
+                Timer timerInvalidate = new Timer();
+                timerInvalidate.startTimer();
+                qexec.invalidate(serviceURI);
+                System.out.println("cache invalidated " + timerInvalidate.endTimer());
+            }            
             try {
-                Model model = qexec.execConstruct();
-                StmtIterator iter = model.listStatements();
-                while ( iter.hasNext() ) {
-                    iter.next();
+                ResultSet results = qexec.execSelect();
+                for (; results.hasNext();) {
+                    results.nextSolution();
                 }
             } finally {
                 qexec.close();
             }
-
             
             System.out.println("query " + i + " " + timerQuery.endTimer());
             
